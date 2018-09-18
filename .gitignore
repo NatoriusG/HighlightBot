@@ -1,8 +1,9 @@
 # Secure files
 .tokens
 
-# Log/config files
+# Log/config/data files
 log.txt
+userdata/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

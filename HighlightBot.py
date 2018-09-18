@@ -9,7 +9,9 @@ with open('.tokens') as token_file:
 	TOKEN = token_file.readline().rstrip('\n')
 	IMG_ID = token_file.readline().rstrip('\n')
 IMG_HEAD = { 'Authorization': 'Client-ID {}'.format(IMG_ID) }
+STORE_PATH = 'userdata/{}.nes'
 LOG = 'log.txt'
+LOG_ON = False
 
 client = Bot(command_prefix=CLIENT_PREFIX)
 
@@ -18,26 +20,54 @@ async def log(message='', newline='\n', error=''):
 
 	message += newline
 
-	if error == 'warning':
+	if error == 'warn':
 		message = 'WARNING: ' + message
 	elif error == 'fail':
 		message = 'ERROR ' + message
 
 	async with aiofiles.open(LOG, mode='a') as log_file:
 		print(message, end='')
-		await log_file.write(message)
+		if LOG_ON == True:
+			await log_file.write(message)
+
+async def get_tags(link):
+
+	print('getting tags')
+	return [ 'test', 'test2', 'testing' ]
+	#try:
+	#	async with client.web_session.get(link, headers=IMG_HEAD) as web_response:
+	#		print('response:\n{}'.format(await web_response.json()))
+	#except:
+	#	await log('accessing web content failed for link: {}'.format(link), 'fail')
+	#	return
 
 # Take in a validated username and an image link, 
 async def store(username, link):
 
+	tags = await get_tags(link)
+	register_data = { 'link': link, 'tags': tags }
+
+	# First collect any stored data
+	stored_data = None
+
 	try:
-		async with client.web_session.get(link, headers=IMG_HEAD) as web_response:
-			print('response:\n{}'.format(await web_response.json()))
+		async with aiofiles.open(STORE_PATH.format(username), mode='r') as userdata_file:
+			stored_data = yaml.load(await userdata_file.read())
 	except:
-		await log('accessing web content failed for link: {}'.format(link), 'fail')
-		return
+		await log('Failed to open userdata file for user: {}'.format(username), 'warn')
 
+	# Now merge in new data
+	if stored_data == None:
+		stored_data = []
 
+	stored_data.append(register_data)
+	merged_data = yaml.dump(stored_data)
+	print('merged data: {}'.format(merged_data))
+
+	# Finally, write to file
+	async with aiofiles.open(STORE_PATH.format(username), mode='w') as userdata_file:
+		await userdata_file.write(merged_data)
+		await userdata_file.flush()
 		
 @client.command(name='register',
 				description='Registers a higlight link with the user mentioned.',
