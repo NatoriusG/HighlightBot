@@ -9,6 +9,7 @@ with open('.tokens') as token_file:
 	TOKEN = token_file.readline().rstrip('\n')
 	IMG_ID = token_file.readline().rstrip('\n')
 IMG_HEAD = { 'Authorization': 'Client-ID {}'.format(IMG_ID) }
+IMG_URL = 'https://api.imgur.com/3/album/{}'
 STORE_PATH = 'userdata/{}.nes'
 LOG = 'log.txt'
 LOG_ON = False
@@ -16,7 +17,7 @@ LOG_ON = False
 client = Bot(command_prefix=CLIENT_PREFIX)
 
 # Write asynchronously to log file
-async def log(message='', newline='\n', error=''):
+async def log(message='', error='', newline='\n'):
 
 	message += newline
 
@@ -32,14 +33,23 @@ async def log(message='', newline='\n', error=''):
 
 async def get_tags(link):
 
-	print('getting tags')
-	return [ 'test', 'test2', 'testing' ]
-	#try:
-	#	async with client.web_session.get(link, headers=IMG_HEAD) as web_response:
-	#		print('response:\n{}'.format(await web_response.json()))
-	#except:
-	#	await log('accessing web content failed for link: {}'.format(link), 'fail')
-	#	return
+	# Get correct url
+	album_id = link[link.rfind('/')+1:]
+	album_url = IMG_URL.format(album_id)
+
+	# Request data and find tags
+	tags = []
+
+	try:
+		async with client.web_session.get(link, headers=IMG_HEAD) as web_response:
+
+			image_data = (await web_response.json())['data']['images'][0]
+			tags = image_data['description'].replace(' ', '').split('#')[1:]
+
+	except:
+		await log('accessing web content failed for link: {}'.format(link), 'fail')
+
+	return tags
 
 # Take in a validated username and an image link, 
 async def store(username, link):
@@ -59,8 +69,16 @@ async def store(username, link):
 	# Now merge in new data
 	if stored_data == None:
 		stored_data = []
+	else:
+		for data_entry in stored_data:
+			# If the new data is a copy of some old data, throw it away
+			if data_entry == register_data:
+				await log('Data found to be duplicate, ignoring', 'warn')
+				register_data = None
 
-	stored_data.append(register_data)
+	if register_data != None:
+		stored_data.append(register_data)
+
 	merged_data = yaml.dump(stored_data)
 	print('merged data: {}'.format(merged_data))
 
@@ -68,6 +86,12 @@ async def store(username, link):
 	async with aiofiles.open(STORE_PATH.format(username), mode='w') as userdata_file:
 		await userdata_file.write(merged_data)
 		await userdata_file.flush()
+
+	# Inform command of result
+	if register_data != None:
+		return 'success'
+	else:
+		return 'duplicate'
 		
 @client.command(name='register',
 				description='Registers a higlight link with the user mentioned.',
@@ -79,9 +103,9 @@ async def register(*args):
 
 	# Initial parsing
 	for argument in args:
-		if argument.startswith('player=') or argument.startswith('user='):
+		if argument.startswith('player=') or argument.startswith('user=') or argument.startswith('u='):
 			username = argument.split('=')[1]
-		elif argument.startswith('link=') or argument.startswith('highlight='):
+		elif argument.startswith('link=') or argument.startswith('highlight=') or argument.startswith('l='):
 			link = argument.split('=')[1]
 
 	await log('user is {}, link is {}'.format(username, link))
@@ -95,7 +119,13 @@ async def register(*args):
 			valid = True
 			
 	if valid == True:
-		await store(username, link)
+
+		result = await store(username, link)
+		
+		if result == 'success':
+			await client.say('New highlight for {} stored successfully.'.format(username))
+		elif result == 'duplicate':
+			await client.say('Highlight for {} was already stored.'.format(username))
 	else:
 		await log('invalid arguments: [ {}, {} ]'.format(username, link), 'fail')
 
