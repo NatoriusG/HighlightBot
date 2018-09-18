@@ -41,7 +41,7 @@ async def get_tags(link):
 	tags = []
 
 	try:
-		async with client.web_session.get(link, headers=IMG_HEAD) as web_response:
+		async with client.web_session.get(album_url, headers=IMG_HEAD) as web_response:
 
 			image_data = (await web_response.json())['data']['images'][0]
 			tags = image_data['description'].replace(' ', '').split('#')[1:]
